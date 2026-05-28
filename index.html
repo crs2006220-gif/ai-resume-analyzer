@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 简历分析系统</title>
+  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css" />
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://unpkg.com/element-plus"></script>
+  <style>
+    body { margin: 0; background: #f5f7fa; }
+    .header { background: #409eff; color: #fff; padding: 20px 40px; }
+    .header h1 { margin: 0; font-size: 22px; }
+    .container { max-width: 960px; margin: 24px auto; padding: 0 16px; }
+    .card { background: #fff; border-radius: 8px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+    .card h3 { margin: 0 0 16px; color: #303133; border-bottom: 2px solid #409eff; padding-bottom: 8px; }
+    .score-row { display: flex; gap: 16px; flex-wrap: wrap; }
+    .score-item { flex: 1; min-width: 140px; text-align: center; padding: 16px; background: #f0f5ff; border-radius: 8px; }
+    .score-item .value { font-size: 32px; font-weight: 700; color: #409eff; }
+    .score-item .label { font-size: 13px; color: #909399; margin-top: 4px; }
+    .resume-field { margin-bottom: 12px; }
+    .resume-field .field-label { font-weight: 600; color: #606266; margin-bottom: 4px; }
+    .tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .empty-tip { color: #c0c4cc; text-align: center; padding: 40px 0; }
+    .error-card { background: #fef0f0; border: 1px solid #fde2e2; border-radius: 8px; padding: 16px; margin-bottom: 20px; color: #f56c6c; }
+    .progress-stage-text { text-align: center; color: #606266; font-size: 14px; margin-top: 10px; }
+    .progress-stage-text.done { color: #67c23a; font-weight: 600; }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div class="header">
+    <h1>AI 简历分析系统</h1>
+  </div>
+
+  <div class="container">
+    <!-- Upload -->
+    <div class="card">
+      <h3>上传简历</h3>
+      <el-row :gutter="16">
+        <el-col :span="18">
+          <el-upload
+            ref="uploadRef"
+            drag
+            :auto-upload="false"
+            :limit="1"
+            accept=".pdf"
+            :on-change="handleFileChange"
+            :on-remove="handleFileRemove"
+            :file-list="fileList"
+          >
+            <el-icon style="font-size:48px;color:#c0c4cc"><svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/></svg></el-icon>
+            <div class="el-upload__text">将 PDF 文件拖拽到此处，或 <em>点击上传</em></div>
+          </el-upload>
+        </el-col>
+        <el-col :span="6">
+          <el-input
+            v-model="position"
+            type="textarea"
+            :rows="6"
+            placeholder="输入目标岗位描述（可选）"
+            :disabled="loading"
+          />
+        </el-col>
+      </el-row>
+      <div style="margin-top:16px;">
+        <el-button type="primary" :loading="loading" @click="analyzeResume" :disabled="!file">
+          {{ loading ? '分析中...' : '开始分析' }}
+        </el-button>
+        <el-button @click="resetAll" :disabled="loading">重置</el-button>
+      </div>
+    </div>
+
+    <!-- Progress -->
+    <div class="card" v-if="showProgress">
+      <h3>处理进度</h3>
+      <el-progress
+        :percentage="Math.round(progressPercent)"
+        :stroke-width="15"
+        :color="progressColors"
+      />
+      <div class="progress-stage-text" :class="{ done: progressPercent >= 100 }">{{ progressText }}</div>
+    </div>
+
+    <!-- Error -->
+    <div class="error-card" v-if="errorMsg">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span>{{ errorMsg }}</span>
+        <el-button type="danger" size="small" text @click="errorMsg=''">关闭</el-button>
+      </div>
+    </div>
+
+    <!-- Resume Info -->
+    <div class="card" v-if="resumeInfo && (resumeInfo.name || resumeInfo.email || resumeInfo.skills?.length)">
+      <h3>简历信息</h3>
+      <div class="resume-field">
+        <div class="field-label">姓名</div>
+        <div>{{ resumeInfo.name || '-' }}</div>
+      </div>
+      <div class="resume-field">
+        <div class="field-label">联系方式</div>
+        <div>{{ resumeInfo.email || '-' }} / {{ resumeInfo.phone || '-' }}</div>
+      </div>
+      <div class="resume-field" v-if="resumeInfo.education?.length">
+        <div class="field-label">教育经历</div>
+        <div v-for="(edu, i) in resumeInfo.education" :key="i" style="margin-bottom:4px">
+          {{ edu.school }} · {{ edu.major }} · {{ edu.degree }} · {{ edu.period }}
+        </div>
+      </div>
+      <div class="resume-field" v-if="resumeInfo.experience?.length">
+        <div class="field-label">工作经历</div>
+        <div v-for="(exp, i) in resumeInfo.experience" :key="i" style="margin-bottom:6px">
+          <strong>{{ exp.company }}</strong> · {{ exp.position }} · {{ exp.period }}
+          <div style="color:#909399;font-size:13px">{{ exp.description }}</div>
+        </div>
+      </div>
+      <div class="resume-field" v-if="resumeInfo.skills?.length">
+        <div class="field-label">技能</div>
+        <div class="tag-list">
+          <el-tag v-for="(s, i) in resumeInfo.skills" :key="i" size="small">{{ s }}</el-tag>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scores -->
+    <div class="card" v-if="scores && scores.overall > 0">
+      <h3>匹配度评分</h3>
+      <div class="score-row">
+        <div class="score-item">
+          <div class="value">{{ scores.overall }}</div>
+          <div class="label">综合评分</div>
+        </div>
+        <div class="score-item">
+          <div class="value">{{ scores.matching }}</div>
+          <div class="label">岗位匹配</div>
+        </div>
+        <div class="score-item">
+          <div class="value">{{ scores.structure }}</div>
+          <div class="label">简历结构</div>
+        </div>
+        <div class="score-item">
+          <div class="value">{{ scores.content }}</div>
+          <div class="label">内容质量</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Analysis -->
+    <div class="card" v-if="analysis.strengths?.length || analysis.weaknesses?.length || analysis.suggestions?.length">
+      <h3>分析结果</h3>
+      <div v-if="analysis.summary" style="margin-bottom:16px;padding:12px;background:#f0f5ff;border-radius:6px;color:#303133">
+        {{ analysis.summary }}
+      </div>
+
+      <el-row :gutter="16">
+        <el-col :span="12" v-if="analysis.strengths?.length">
+          <div class="field-label" style="color:#67c23a">优势</div>
+          <ul style="padding-left:18px;color:#606266">
+            <li v-for="(s, i) in analysis.strengths" :key="i" style="margin-bottom:4px">{{ s }}</li>
+          </ul>
+        </el-col>
+        <el-col :span="12" v-if="analysis.weaknesses?.length">
+          <div class="field-label" style="color:#f56c6c">不足</div>
+          <ul style="padding-left:18px;color:#606266">
+            <li v-for="(w, i) in analysis.weaknesses" :key="i" style="margin-bottom:4px">{{ w }}</li>
+          </ul>
+        </el-col>
+      </el-row>
+      <div v-if="analysis.suggestions?.length" style="margin-top:12px">
+        <div class="field-label" style="color:#e6a23c">改进建议</div>
+        <ul style="padding-left:18px;color:#606266">
+          <li v-for="(sg, i) in analysis.suggestions" :key="i" style="margin-bottom:4px">{{ sg }}</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card" v-if="!file && !resumeInfo?.name && (!analysis.strengths?.length)">
+      <div class="empty-tip">请上传 PDF 简历开始分析</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const { createApp, ref } = Vue
+
+const defaultColors = [
+  { color: '#409eff', percentage: 30 },
+  { color: '#36cfc9', percentage: 70 },
+  { color: '#67c23a', percentage: 100 },
+]
+
+createApp({
+  setup() {
+    const file = ref(null)
+    const fileList = ref([])
+    const position = ref('')
+    const loading = ref(false)
+    const errorMsg = ref('')
+    const resumeInfo = ref(null)
+    const scores = ref({ overall: 0, matching: 0, structure: 0, content: 0 })
+    const analysis = ref({ strengths: [], weaknesses: [], suggestions: [], summary: '' })
+    const showProgress = ref(false)
+    const progressPercent = ref(0)
+    const progressText = ref('')
+    const progressColors = ref(defaultColors)
+
+    let progressTimer = null
+
+    const { ElMessage } = ElementPlus
+
+    const handleFileChange = (uploadFile) => {
+      file.value = uploadFile.raw
+      fileList.value = [uploadFile]
+      console.log('[upload] file selected:', uploadFile.name, 'size:', uploadFile.size)
+    }
+
+    const handleFileRemove = () => {
+      file.value = null
+      fileList.value = []
+      console.log('[upload] file removed')
+    }
+
+    const resetAll = () => {
+      stopProgress()
+      file.value = null
+      fileList.value = []
+      position.value = ''
+      resumeInfo.value = null
+      scores.value = { overall: 0, matching: 0, structure: 0, content: 0 }
+      analysis.value = { strengths: [], weaknesses: [], suggestions: [], summary: '' }
+      errorMsg.value = ''
+      showProgress.value = false
+      progressPercent.value = 0
+      progressText.value = ''
+      console.log('[app] all state reset')
+    }
+
+    const stopProgress = () => {
+      if (progressTimer) {
+        clearInterval(progressTimer)
+        progressTimer = null
+      }
+    }
+
+    const startSimulatedProgress = () => {
+      stopProgress()
+      progressPercent.value = 15
+      progressText.value = '正在解析 PDF 文件结构...'
+
+      setTimeout(() => {
+        progressPercent.value = 25
+        progressText.value = 'AI 正在深度提取简历信息并计算匹配度...'
+      }, 300)
+
+      // Decelerating growth: fast at first, slow as approaching 90%
+      progressTimer = setInterval(() => {
+        const current = progressPercent.value
+        if (current >= 90) {
+          stopProgress()
+          return
+        }
+        // remaining gap to 90, larger gap = faster increment
+        const remaining = 90 - current
+        const increment = Math.max(0.3, remaining * 0.06 + Math.random() * 0.5)
+        progressPercent.value = Math.min(90, current + increment)
+      }, 200)
+    }
+
+    const finishProgress = () => {
+      stopProgress()
+      progressPercent.value = 100
+      progressText.value = '分析完成！'
+
+      setTimeout(() => {
+        showProgress.value = false
+      }, 1000)
+    }
+
+    const analyzeResume = async () => {
+      if (!file.value) return
+      loading.value = true
+      errorMsg.value = ''
+      showProgress.value = true
+      startSimulatedProgress()
+
+      try {
+        const formData = new FormData()
+        formData.append('file', file.value)
+        formData.append('position', position.value)
+
+        console.log('[api] POST /api/v1/resume/upload')
+        const res = await fetch('https://ai-resuanalyzer-hhmxrvfegx.cn-hangzhou.fcapp.run/api/v1/resume/upload', { method: 'POST', body: formData })
+
+        if (!res.ok) {
+          stopProgress()
+          showProgress.value = false
+          const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }))
+          throw new Error(err.detail || `HTTP ${res.status}`)
+        }
+
+        const data = await res.json()
+        console.log('[api] upload response:', data)
+
+        resumeInfo.value = data.resume_info
+        scores.value = data.scores
+        analysis.value = {
+          strengths: data.strengths || [],
+          weaknesses: data.weaknesses || [],
+          suggestions: data.suggestions || [],
+          summary: data.summary || '',
+        }
+
+        finishProgress()
+        ElMessage.success('分析完成')
+      } catch (e) {
+        stopProgress()
+        showProgress.value = false
+        errorMsg.value = `分析失败: ${e.message}`
+        console.error('[api] upload error:', e)
+        ElMessage.error(`分析失败: ${e.message}`)
+      } finally {
+        loading.value = false
+      }
+    }
+
+    return {
+      file, fileList, position, loading, errorMsg, resumeInfo, scores, analysis,
+      showProgress, progressPercent, progressText, progressColors,
+      handleFileChange, handleFileRemove, resetAll, analyzeResume,
+    }
+  }
+}).use(ElementPlus).mount('#app')
+</script>
+</body>
+</html>
