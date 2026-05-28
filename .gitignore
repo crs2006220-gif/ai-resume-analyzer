@@ -52,6 +52,48 @@ htmlcov/
 # Jupyter Notebook
 .ipynb_checkpoints
 
+# Serverless Devs
+.s/
+code/
+wheels/
+
+# Vendored Python 依赖（部署时通过 pip install 生成）
+*-*.dist-info/
+bin/
+annotated_types/
+anyio/
+certifi/
+click/
+colorama/
+distro/
+dotenv/
+fastapi/
+fitz/
+h11/
+httpcore/
+httpx/
+idna/
+jiter/
+multipart/
+openai/
+pydantic/
+pydantic_core/
+pydantic_settings/
+pymupdf/
+python_dotenv/
+python_multipart/
+redis/
+sniffio/
+starlette/
+tqdm/
+typing_extensions.py
+uvicorn/
+exceptiongroup/
+exceptiongroup-*.dist-info/
+
+# 部署配置（含敏感信息，使用 s.yaml.example 作为模板）
+s.yaml
+
 # 项目特定
 uploads/
 temp/
