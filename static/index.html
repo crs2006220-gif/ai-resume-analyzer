@@ -289,7 +289,7 @@ createApp({
         formData.append('position', position.value)
 
         console.log('[api] POST /api/v1/resume/upload')
-        const res = await fetch('/api/v1/resume/upload', { method: 'POST', body: formData })
+        const res = await fetch('https://ai-resuanalyzer-hhmxrvfegx.cn-hangzhou.fcapp.run/api/v1/resume/upload', { method: 'POST', body: formData })
 
         if (!res.ok) {
           stopProgress()

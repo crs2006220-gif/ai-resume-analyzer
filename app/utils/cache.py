@@ -12,12 +12,22 @@ def file_hash(file_bytes: bytes) -> str:
 
 async def get_cached(key: str) -> dict | None:
     r = await get_redis()
-    data = await r.get(key)
-    if data:
-        return json.loads(data)
+    if r is None:
+        return None
+    try:
+        data = await r.get(key)
+        if data:
+            return json.loads(data)
+    except Exception:
+        pass
     return None
 
 
 async def set_cache(key: str, value: dict, ttl: int = CACHE_TTL) -> None:
     r = await get_redis()
-    await r.setex(key, ttl, json.dumps(value, ensure_ascii=False))
+    if r is None:
+        return
+    try:
+        await r.setex(key, ttl, json.dumps(value, ensure_ascii=False))
+    except Exception:
+        pass
